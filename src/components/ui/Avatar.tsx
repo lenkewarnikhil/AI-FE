@@ -1,4 +1,5 @@
 import React from 'react';
+import { getFileUrl } from '../../services/api';
 
 interface AvatarProps {
   src?: string | null;
@@ -15,6 +16,8 @@ export const Avatar: React.FC<AvatarProps> = ({
   size = 'md',
   className = '',
 }) => {
+  const fullSrc = getFileUrl(src);
+
   const getInitials = () => {
     if (name && name.trim().length > 0) {
       const parts = name.trim().split(' ');
@@ -40,9 +43,9 @@ export const Avatar: React.FC<AvatarProps> = ({
     <div
       className={`relative inline-flex items-center justify-center rounded-full overflow-hidden glass-card border border-white/20 shadow-md shrink-0 ${sizeClasses[size]} ${className}`}
     >
-      {src ? (
+      {fullSrc ? (
         <img
-          src={src}
+          src={fullSrc}
           alt={name || 'Avatar'}
           className="w-full h-full object-cover"
           onError={(e) => {

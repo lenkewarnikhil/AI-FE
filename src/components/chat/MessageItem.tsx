@@ -6,6 +6,7 @@ import type { Message } from '../../types';
 import { CodeBlock } from './CodeBlock';
 import { Avatar } from '../ui/Avatar';
 import { useAuthStore } from '../../store/useAuthStore';
+import { getFileUrl } from '../../services/api';
 
 interface MessageItemProps {
   message: Message & { attachments?: any[] };
@@ -79,7 +80,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 <div key={idx} className="rounded-xl overflow-hidden border border-white/20 bg-black/20 p-1">
                   {att.previewUrl || (att.base64 && att.mime_type?.startsWith('image/')) ? (
                     <img
-                      src={att.previewUrl || att.base64}
+                      src={getFileUrl(att.previewUrl || att.url || att.base64)}
                       alt={att.filename || 'Attachment'}
                       className="max-h-48 max-w-xs rounded-lg object-cover"
                     />
