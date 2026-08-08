@@ -10,6 +10,18 @@ export const getApiUrl = (path: string): string => {
   return `${API_BASE_URL}${cleanPath}`;
 };
 
+export const getFileUrl = (url?: string | null): string => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  if (cleanPath.startsWith('/api/')) {
+    return `${API_BASE_URL}${cleanPath.slice(4)}`;
+  }
+  return `${API_BASE_URL}${cleanPath}`;
+};
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
