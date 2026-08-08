@@ -16,6 +16,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { GoogleCallback } from './components/auth/GoogleCallback';
 import { ToastContainer } from './components/ui/ToastContainer';
 import type { Message } from './types';
+import { getApiUrl } from './services/api';
 
 const queryClient = new QueryClient();
 
@@ -86,7 +87,7 @@ const ProtectedWorkspace: React.FC = () => {
     setGenerating(true, controller);
 
     try {
-      const response = await fetch(`/api/conversations/${targetConvId}/messages/stream`, {
+      const response = await fetch(getApiUrl(`/conversations/${targetConvId}/messages/stream`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

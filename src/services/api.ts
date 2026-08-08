@@ -3,10 +3,15 @@ import { useAuthStore } from '../store/useAuthStore';
 
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 const cleanBaseUrl = rawBaseUrl.endsWith('/') ? rawBaseUrl.slice(0, -1) : rawBaseUrl;
-const apiBase = cleanBaseUrl ? `${cleanBaseUrl}/api` : '/api';
+export const API_BASE_URL = cleanBaseUrl ? `${cleanBaseUrl}/api` : '/api';
+
+export const getApiUrl = (path: string): string => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${cleanPath}`;
+};
 
 export const api = axios.create({
-  baseURL: apiBase,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
