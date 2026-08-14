@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  User as UserIcon, Palette, Shield, Upload, Trash2, Check, ArrowLeft, Sliders
+  User as UserIcon, Palette, Shield, Upload, Trash2, Check, ArrowLeft, Sliders, Bot, Thermometer
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -8,6 +8,7 @@ import { Avatar } from '../ui/Avatar';
 import { Modal } from '../ui/Modal';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { useChatStore } from '../../store/useChatStore';
 import { useToastStore } from '../../store/useToastStore';
 import { api } from '../../services/api';
 
@@ -18,22 +19,32 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<'account' | 'appearance' | 'security'>('account');
   const { user, updateUser } = useAuthStore();
-  const { settings, updateSettings } = useSettingsStore();
+  const { settings, updateSettings, resetSettings } = useSettingsStore();
+  const deleteAllConversations = useChatStore((state) => state.deleteAllConversations);
   const addToast = useToastStore((state) => state.addToast);
 
   const [nameInput, setNameInput] = useState(user?.name || '');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Local state for smooth slider dragging (0 = Solid, 100 = Fully Transparent)
+  // Local state for smooth slider dragging
   const [transparencyVal, setTransparencyVal] = useState<number>(settings.transparency_pct ?? 25);
+  const [systemPromptVal, setSystemPromptVal] = useState<string>(settings.system_prompt ?? '');
+  const [tempVal, setTempVal] = useState<number>(settings.temperature ?? 0.7);
 
   useEffect(() => {
     if (settings.transparency_pct !== undefined) {
       setTransparencyVal(settings.transparency_pct);
     }
-  }, [settings.transparency_pct]);
+    if (settings.system_prompt !== undefined) {
+      setSystemPromptVal(settings.system_prompt);
+    }
+    if (settings.temperature !== undefined) {
+      setTempVal(settings.temperature);
+    }
+  }, [settings.transparency_pct, settings.system_prompt, settings.temperature]);
 
   const handleUpdateName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +95,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     updateSettings({ transparency_pct: val });
   };
 
+  const handleConfirmDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      await deleteAllConversations();
+      addToast('All conversation history deleted permanently', 'info');
+      setShowDeleteAllModal(false);
+    } catch (err) {
+      addToast('Failed to delete conversation history', 'error');
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0f121a] text-slate-100 overflow-hidden">
       {/* Header Bar */}
@@ -101,12 +125,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       {/* Main Settings Canvas */}
       <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
         <div className="flex flex-col md:flex-row gap-8">
-          {/* Sub-Navigation (3 merged tabs) */}
+          {/* Sub-Navigation */}
           <div className="flex md:flex-col gap-1 border-b md:border-b-0 md:border-r border-white/10 pb-4 md:pb-0 md:pr-6 md:w-56 shrink-0">
             {[
               { id: 'account', label: 'Account', icon: UserIcon },
-              { id: 'appearance', label: 'Appearance & Preferences', icon: Palette },
-              { id: 'security', label: 'Security', icon: Shield },
+              { id: 'appearance', label: 'Appearance & AI Persona', icon: Palette },
+              { id: 'security', label: 'Security & History', icon: Shield },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -204,7 +228,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                   </div>
                 </div>
 
-                {/* Glass Translucency Opacity Slider (0 = Solid, 100 = Fully Transparent) */}
+                {/* Glass Translucency Opacity Slider */}
                 <div className="pt-6 border-t border-white/10">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -216,7 +240,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mb-4">
-                    Set transparency level across workspace panels and bubbles (0% = Solid, 100% = Fully Transparent).
+                    Set transparency level across workspace panels and bubbles (0% = Solid, 90% = Transparent Glass).
                   </p>
 
                   <div className="relative flex items-center gap-3">
@@ -229,13 +253,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                       className="custom-slider flex-1"
                     />
                   </div>
-                  <div className="flex justify-between text-[11px] text-slate-400 mt-2 font-medium">
-                    <span>0% (Solid Matte)</span>
-                    <span>90% (Fully Transparent Glass)</span>
+                </div>
+
+                {/* AI Persona System Instructions & Creativity */}
+                <div className="pt-6 border-t border-white/10 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-purple-400" />
+                    <h3 className="text-sm font-semibold text-white">AI Persona & System Instructions</h3>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Set default system instructions for the AI (e.g. "Answer concisely in bullet points", "You are an expert Python developer").
+                  </p>
+                  <textarea
+                    value={systemPromptVal}
+                    onChange={(e) => {
+                      setSystemPromptVal(e.target.value);
+                      updateSettings({ system_prompt: e.target.value });
+                    }}
+                    placeholder="Enter custom instructions for Gemini AI..."
+                    rows={3}
+                    className="w-full glass-input p-3 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 resize-none border border-white/15 focus:border-purple-500/60 outline-none"
+                  />
+
+                  {/* Temperature Slider */}
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-slate-300 flex items-center gap-1.5 font-medium">
+                        <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Creativity / Temperature ({tempVal.toFixed(1)})</span>
+                      </label>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {tempVal < 0.4 ? 'Precise & Focused' : tempVal > 0.8 ? 'Highly Creative' : 'Balanced'}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="1.0"
+                      step="0.1"
+                      value={tempVal}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setTempVal(val);
+                        updateSettings({ temperature: val });
+                      }}
+                      className="custom-slider w-full"
+                    />
                   </div>
                 </div>
 
-                {/* Merged Chat Preferences */}
+                {/* Chat Preferences */}
                 <div className="pt-6 border-t border-white/10 space-y-3">
                   <h3 className="text-sm font-semibold text-white mb-3">Chat Preferences</h3>
                   <label className="flex items-center justify-between text-xs text-slate-200 cursor-pointer p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
@@ -258,6 +325,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                     />
                   </label>
                 </div>
+
+                {/* Reset Preferences */}
+                <div className="pt-6 border-t border-white/10 flex justify-end">
+                  <Button
+                    variant="glass"
+                    size="sm"
+                    onClick={async () => {
+                      await resetSettings();
+                      addToast('Settings reset to defaults', 'info');
+                    }}
+                  >
+                    Reset to Defaults
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -265,7 +346,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-sm font-semibold text-white mb-1">Clear Conversation Data</h3>
-                  <p className="text-xs text-slate-400 mb-4">Permanently remove all your conversation history from your workspace.</p>
+                  <p className="text-xs text-slate-400 mb-4">Permanently remove all your conversation history from your workspace database.</p>
                   <Button
                     variant="danger"
                     size="sm"
@@ -300,10 +381,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             <Button
               size="sm"
               variant="danger"
-              onClick={() => {
-                setShowDeleteAllModal(false);
-                addToast('All conversation history cleared', 'info');
-              }}
+              isLoading={isDeletingAll}
+              onClick={handleConfirmDeleteAll}
             >
               Confirm Clear All
             </Button>

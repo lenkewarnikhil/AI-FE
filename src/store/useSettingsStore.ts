@@ -8,6 +8,7 @@ interface SettingsStore {
   isLoading: boolean;
   fetchSettings: () => Promise<void>;
   updateSettings: (newSettings: Partial<UserSettings> & { transparency_pct?: number }) => Promise<void>;
+  resetSettings: () => Promise<void>;
 }
 
 const applyThemeTokens = (accent?: string, transparency?: number) => {
@@ -30,7 +31,9 @@ export const useSettingsStore = create<SettingsStore>()(
         background_opacity: 0.15,
         accent_color: 'blue',
         transparency_pct: 25, // 0 = Solid, 100 = Fully Transparent
-        default_model: 'gemini-2.5-flash',
+        default_model: 'gemini-3.6-flash',
+        system_prompt: '',
+        temperature: 0.7,
         enter_to_send: true,
         show_timestamps: true,
         stream_responses: true,
@@ -59,6 +62,28 @@ export const useSettingsStore = create<SettingsStore>()(
         } catch (e) {
           // Local settings preserved
         }
+      },
+      resetSettings: async () => {
+        const defaults = {
+          theme: 'dark',
+          theme_preset: 'default',
+          background_type: 'preset',
+          background_value: 'aurora',
+          background_opacity: 0.15,
+          accent_color: 'blue',
+          transparency_pct: 25,
+          default_model: 'gemini-3.6-flash',
+          system_prompt: '',
+          temperature: 0.7,
+          enter_to_send: true,
+          show_timestamps: true,
+          stream_responses: true,
+        };
+        applyThemeTokens(defaults.accent_color, defaults.transparency_pct);
+        set({ settings: defaults as any });
+        try {
+          await api.patch('/settings', defaults);
+        } catch (e) {}
       },
     }),
     {

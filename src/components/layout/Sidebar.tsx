@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Plus, Search, Trash2, Edit2, Check, X,
   Settings as SettingsIcon, User as UserIcon, MessageSquareText,
-  ShieldCheck, FileText
+  ShieldCheck, FileText, LogOut
 } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -35,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     deleteConversation,
   } = useChatStore();
 
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuthStore();
   const addToast = useToastStore((state) => state.addToast);
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -73,11 +73,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleSaveRename = async (id: number) => {
-    if (editTitle.trim()) {
-      await renameConversation(id, editTitle.trim());
+    const newTitle = editTitle.trim();
+    setEditingId(null);
+    if (newTitle) {
+      await renameConversation(id, newTitle);
       addToast('Conversation renamed', 'success');
     }
-    setEditingId(null);
   };
 
   const handleConfirmDelete = async () => {
@@ -218,7 +219,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           if (e.key === 'Enter') handleSaveRename(chat.id);
                           if (e.key === 'Escape') setEditingId(null);
                         }}
-                        className="bg-[#0f172a] px-1.5 py-0.5 rounded border border-blue-500 text-xs text-white outline-none"
+                        onBlur={() => handleSaveRename(chat.id)}
+                        className="bg-[#0f172a] px-1.5 py-0.5 rounded border border-blue-500 text-xs text-white outline-none w-full"
                         autoFocus
                       />
                     ) : (
@@ -296,6 +298,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <FileText className="w-4 h-4 text-amber-400" />
                     <span>Terms & Conditions (T&C)</span>
                   </button>
+
+                  <button
+                    onClick={() => {
+                      logout();
+                      setShowProfileMenu(false);
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer w-full text-left border-t border-white/5 pt-2 mt-1"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-400" />
+                    <span>Sign Out</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -325,7 +338,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p>You agree to use Nikhil's Personal AI solely for lawful personal and productivity purposes. You may not upload malicious code or attempt unauthorized system access.</p>
           
           <h4 className="font-bold text-slate-100 text-xs">2. Privacy & Data Handling</h4>
-          <p>Your session tokens are securely encrypted and valid for 6 hours. Uploaded images and documents are processed via Google Gemini Multimodal APIs for generating chat responses.</p>
+          <p>Your session tokens are securely encrypted and automatically monitored for expiration. Uploaded images and documents are processed via Google Gemini Multimodal APIs for generating chat responses.</p>
           
           <h4 className="font-bold text-slate-100 text-xs">3. Single Sign-On (SSO)</h4>
           <p>When authenticating via Google Single Sign-On (SSO), Google sends a standard notification confirming access permissions for your primary profile email. No unauthorized personal data is stored.</p>

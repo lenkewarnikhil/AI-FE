@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Copy, Check, RotateCcw, Zap, Sparkles, FileText, Image } from 'lucide-react';
+import { Copy, Check, RotateCcw, Zap, Sparkles, FileText, Image, Cpu, Trash2 } from 'lucide-react';
 import type { Message } from '../../types';
 import { CodeBlock } from './CodeBlock';
 import { Avatar } from '../ui/Avatar';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useChatStore } from '../../store/useChatStore';
 import { getFileUrl } from '../../services/api';
 
 interface MessageItemProps {
@@ -21,12 +22,25 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 }) => {
   const isUser = message.role === 'user';
   const user = useAuthStore((state) => state.user);
+  const deleteMessage = useChatStore((state) => state.deleteMessage);
   const [copied, setCopied] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleCopyMessage = () => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDeleteMessage = async () => {
+    if (!message.id) return;
+    setIsDeleting(true);
+    try {
+      await deleteMessage(message.id);
+    } catch (err) {
+      console.error('Failed to delete message', err);
+      setIsDeleting(false);
+    }
   };
 
   const formattedTime = new Date(message.created_at).toLocaleTimeString([], {
@@ -36,14 +50,34 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
   const getModelInfo = (modelId?: string) => {
     switch (modelId) {
+      case 'gemini-3.6-flash':
+        return { label: 'Gemini 3.6 Flash', badgeClass: 'bg-amber-500/10 text-amber-300 border-amber-500/20', avatarClass: 'bg-amber-600/15 border-amber-500/30 text-amber-400', Icon: Zap };
+      case 'gemini-3.5-flash':
+        return { label: 'Gemini 3.5 Flash', badgeClass: 'bg-purple-500/10 text-purple-300 border-purple-500/20', avatarClass: 'bg-purple-600/15 border-purple-500/30 text-purple-400', Icon: Sparkles };
+      case 'gemini-3.5-flash-lite':
+        return { label: 'Gemini 3.5 Flash-Lite', badgeClass: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20', avatarClass: 'bg-emerald-600/15 border-emerald-500/30 text-emerald-400', Icon: Zap };
+      case 'gemini-3.1-flash-lite':
+        return { label: 'Gemini 3.1 Flash-Lite', badgeClass: 'bg-sky-500/10 text-sky-300 border-sky-500/20', avatarClass: 'bg-sky-600/15 border-sky-500/30 text-sky-400', Icon: Zap };
+      case 'gemini-3.1-pro':
+        return { label: 'Gemini 3.1 Pro (Preview)', badgeClass: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20', avatarClass: 'bg-indigo-600/15 border-indigo-500/30 text-indigo-400', Icon: Sparkles };
+      case 'gemini-3-flash':
+        return { label: 'Gemini 3 Flash (Preview)', badgeClass: 'bg-blue-500/10 text-blue-300 border-blue-500/20', avatarClass: 'bg-blue-600/15 border-blue-500/30 text-blue-400', Icon: Zap };
       case 'gemini-2.5-pro':
-        return { label: 'Gemini 2.5 Pro', isPro: true, badgeClass: 'bg-purple-500/10 text-purple-300 border-purple-500/20', avatarClass: 'bg-purple-600/15 border-purple-500/30 text-purple-400', Icon: Sparkles };
-      case 'gemini-1.5-pro':
-        return { label: 'Gemini 1.5 Pro', isPro: true, badgeClass: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20', avatarClass: 'bg-indigo-600/15 border-indigo-500/30 text-indigo-400', Icon: Sparkles };
-      case 'gemini-1.5-flash':
-        return { label: 'Gemini 1.5 Flash', isPro: false, badgeClass: 'bg-blue-500/10 text-blue-300 border-blue-500/20', avatarClass: 'bg-blue-500/15 border-blue-500/30 text-blue-400', Icon: Image };
+        return { label: 'Gemini 2.5 Pro', badgeClass: 'bg-purple-500/10 text-purple-300 border-purple-500/20', avatarClass: 'bg-purple-600/15 border-purple-500/30 text-purple-400', Icon: Sparkles };
+      case 'gemini-2.5-flash':
+        return { label: 'Gemini 2.5 Flash', badgeClass: 'bg-amber-500/10 text-amber-300 border-amber-500/20', avatarClass: 'bg-amber-600/15 border-amber-500/30 text-amber-400', Icon: Zap };
+      case 'gemini-2.5-flash-lite':
+        return { label: 'Gemini 2.5 Flash-Lite', badgeClass: 'bg-sky-500/10 text-sky-300 border-sky-500/20', avatarClass: 'bg-sky-600/15 border-sky-500/30 text-sky-400', Icon: Zap };
       default:
-        return { label: 'Gemini 2.5 Flash', isPro: false, badgeClass: 'bg-amber-500/10 text-amber-300 border-amber-500/20', avatarClass: 'bg-amber-500/15 border-amber-500/30 text-amber-400', Icon: Zap };
+        // Dynamic fallback for any unhandled model string
+        const cleanName = modelId ? modelId.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()) : 'Gemini 3.6 Flash';
+        const isPro = modelId?.includes('pro');
+        return {
+          label: cleanName,
+          badgeClass: isPro ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' : 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+          avatarClass: isPro ? 'bg-purple-600/15 border-purple-500/30 text-purple-400' : 'bg-amber-600/15 border-amber-500/30 text-amber-400',
+          Icon: isPro ? Sparkles : Zap,
+        };
     }
   };
 
@@ -51,7 +85,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const ModelIcon = modelInfo.Icon;
 
   return (
-    <div className={`flex gap-3 px-4 py-3 md:px-6 transition-colors ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex gap-3 px-4 py-3 md:px-6 transition-colors ${isUser ? 'flex-row-reverse' : 'flex-row'} ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}>
       {/* Avatar */}
       {isUser ? (
         <Avatar src={user?.profile_image_url} name={user?.name} email={user?.email} size="sm" />
@@ -121,7 +155,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   },
                 }}
               >
-                {message.content || '...'}
+                {message.content ? (message.isStreaming ? `${message.content} ▍` : message.content) : '...'}
               </ReactMarkdown>
             </div>
           )}
@@ -132,33 +166,40 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           {showTimestamps && <span>{formattedTime}</span>}
 
           {!isUser && (
-            <>
-              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${modelInfo.badgeClass}`}>
-                <ModelIcon className="w-2.5 h-2.5" />
-                <span>{modelInfo.label}</span>
-              </span>
-
-              <div className="flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={handleCopyMessage}
-                  title="Copy response"
-                  className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-
-                {onRegenerate && (
-                  <button
-                    onClick={onRegenerate}
-                    title="Regenerate response"
-                    className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </>
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${modelInfo.badgeClass}`}>
+              <ModelIcon className="w-2.5 h-2.5" />
+              <span>{modelInfo.label}</span>
+            </span>
           )}
+
+          {/* Action Toolbar */}
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleCopyMessage}
+              title="Copy message text"
+              className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+
+            {!isUser && onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                title="Regenerate response"
+                className="p-1 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <button
+              onClick={handleDeleteMessage}
+              title="Delete message"
+              className="p-1 hover:text-rose-400 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
