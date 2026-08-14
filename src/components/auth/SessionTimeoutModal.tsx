@@ -87,7 +87,7 @@ export const SessionTimeoutModal: React.FC<SessionTimeoutModalProps> = () => {
       if (remaining <= 0) {
         setIsOpen(false);
         logout();
-        addToast('Your session has expired. Please log in again.', 'warning');
+        addToast('Your session has expired. Please log in again.', 'error');
         return;
       }
 

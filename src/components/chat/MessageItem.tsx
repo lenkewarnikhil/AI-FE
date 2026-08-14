@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Copy, Check, RotateCcw, Zap, Sparkles, FileText, Image, Cpu, Trash2 } from 'lucide-react';
+import { Copy, Check, RotateCcw, Zap, Sparkles, FileText, Trash2 } from 'lucide-react';
 import type { Message } from '../../types';
 import { CodeBlock } from './CodeBlock';
 import { Avatar } from '../ui/Avatar';
