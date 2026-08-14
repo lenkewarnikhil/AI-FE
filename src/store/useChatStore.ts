@@ -17,10 +17,13 @@ interface ChatStore {
   fetchConversationDetails: (id: number) => Promise<void>;
   createConversation: (title?: string) => Promise<number>;
   renameConversation: (id: number, title: string) => Promise<void>;
+  deleteAllConversations: () => Promise<void>;
   deleteConversation: (id: number) => Promise<void>;
+  deleteMessage: (messageId: number) => Promise<void>;
   addMessage: (conversationId: number, message: Message) => void;
   updateLastMessageContent: (conversationId: number, chunk: string) => void;
   updateLastMessageModel: (conversationId: number, model: string) => void;
+  finishStreamingMessage: (conversationId: number) => void;
   setGenerating: (status: boolean, controller?: AbortController | null) => void;
   stopGeneration: () => void;
 }
@@ -55,7 +58,8 @@ export const useChatStore = create<ChatStore>()(
           set({ conversations: fetchedConvs });
 
           const curActive = get().activeId;
-          if (curActive && fetchedConvs.some((c) => c.id === curActive)) {
+          // Do not fetch details for active conversation while generating response to avoid overwriting streaming state
+          if (curActive && fetchedConvs.some((c) => c.id === curActive) && !get().isGenerating) {
             get().fetchConversationDetails(curActive);
           } else if (fetchedConvs.length > 0 && !curActive) {
             get().setActiveId(fetchedConvs[0].id);
@@ -66,6 +70,9 @@ export const useChatStore = create<ChatStore>()(
       },
 
       fetchConversationDetails: async (id) => {
+        // Skip background refetch for current conversation if generating
+        if (get().isGenerating && get().activeId === id) return;
+
         try {
           const res = await api.get<Conversation>(`/conversations/${id}`);
           const conv = res.data;
@@ -109,6 +116,15 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
+      deleteAllConversations: async () => {
+        await api.delete('/conversations');
+        set({
+          conversations: [],
+          activeId: null,
+          activeConversation: null,
+        });
+      },
+
       deleteConversation: async (id) => {
         await api.delete(`/conversations/${id}`);
         set((state) => {
@@ -125,13 +141,41 @@ export const useChatStore = create<ChatStore>()(
         }
       },
 
+      deleteMessage: async (messageId) => {
+        await api.delete(`/conversations/messages/${messageId}`);
+        set((state) => {
+          if (!state.activeConversation) return state;
+          const updatedMsgs = state.activeConversation.messages.filter((m) => m.id !== messageId);
+          return {
+            activeConversation: {
+              ...state.activeConversation,
+              messages: updatedMsgs,
+            },
+          };
+        });
+      },
+
       addMessage: (conversationId, message) => {
         set((state) => {
           if (state.activeConversation?.id === conversationId) {
             const msgs = state.activeConversation.messages || [];
+            let updatedTitle = state.activeConversation.title;
+
+            // If first user message in a new chat, auto-update title immediately
+            if (message.role === 'user' && (msgs.length === 0 || updatedTitle === 'New Conversation')) {
+              const cleanText = (message.content || 'Attachment').trim().replace(/\n/g, ' ');
+              updatedTitle = cleanText.slice(0, 40) + (cleanText.length > 40 ? '...' : '');
+            }
+
+            const updatedConvs = state.conversations.map((c) =>
+              c.id === conversationId ? { ...c, title: updatedTitle } : c
+            );
+
             return {
+              conversations: updatedConvs,
               activeConversation: {
                 ...state.activeConversation,
+                title: updatedTitle,
                 messages: [...msgs, message],
               },
             };
@@ -144,11 +188,32 @@ export const useChatStore = create<ChatStore>()(
         set((state) => {
           if (state.activeConversation?.id === conversationId) {
             const msgs = [...(state.activeConversation.messages || [])];
-            if (msgs.length > 0) {
-              const lastMsg = { ...msgs[msgs.length - 1] };
-              lastMsg.content += chunk;
-              msgs[msgs.length - 1] = lastMsg;
+            let targetIdx = -1;
+
+            // Always target the assistant message
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              if (msgs[i].role === 'assistant') {
+                targetIdx = i;
+                break;
+              }
             }
+
+            if (targetIdx !== -1) {
+              const targetMsg = { ...msgs[targetIdx] };
+              targetMsg.content += chunk;
+              msgs[targetIdx] = targetMsg;
+            } else {
+              // If assistant message doesn't exist yet, append it cleanly
+              msgs.push({
+                id: Date.now(),
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: chunk,
+                created_at: new Date().toISOString(),
+                isStreaming: true,
+              });
+            }
+
             return {
               activeConversation: {
                 ...state.activeConversation,
@@ -164,9 +229,35 @@ export const useChatStore = create<ChatStore>()(
         set((state) => {
           if (state.activeConversation?.id === conversationId) {
             const msgs = [...(state.activeConversation.messages || [])];
+            let targetIdx = -1;
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              if (msgs[i].role === 'assistant') {
+                targetIdx = i;
+                break;
+              }
+            }
+            if (targetIdx !== -1) {
+              const targetMsg = { ...msgs[targetIdx] };
+              targetMsg.model = model;
+              msgs[targetIdx] = targetMsg;
+            }
+            return {
+              activeConversation: {
+                ...state.activeConversation,
+                messages: msgs,
+              },
+            };
+          }
+          return state;
+        });
+      },
+
+      finishStreamingMessage: (conversationId) => {
+        set((state) => {
+          if (state.activeConversation?.id === conversationId) {
+            const msgs = [...(state.activeConversation.messages || [])];
             if (msgs.length > 0) {
-              const lastMsg = { ...msgs[msgs.length - 1] };
-              lastMsg.model = model;
+              const lastMsg = { ...msgs[msgs.length - 1], isStreaming: false };
               msgs[msgs.length - 1] = lastMsg;
             }
             return {

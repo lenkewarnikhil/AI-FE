@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './store/useAuthStore';
 import { useChatStore } from './store/useChatStore';
@@ -11,6 +11,7 @@ import { MessageList } from './components/chat/MessageList';
 import { MessageInput } from './components/chat/MessageInput';
 import type { FileAttachment } from './components/chat/MessageInput';
 import { AuthModal } from './components/auth/AuthModal';
+import { SessionTimeoutModal } from './components/auth/SessionTimeoutModal';
 import { SettingsView } from './components/settings/SettingsView';
 import { LoginPage } from './components/auth/LoginPage';
 import { GoogleCallback } from './components/auth/GoogleCallback';
@@ -24,7 +25,13 @@ const ProtectedWorkspace: React.FC = () => {
   const { token, isAuthenticated } = useAuthStore();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'chat' | 'settings'>('chat');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  const activeView = location.hash === '#settings' ? 'settings' : 'chat';
+  const setActiveView = (view: 'chat' | 'settings') => {
+    navigate(view === 'settings' ? '#settings' : '#', { replace: true });
+  };
 
   const {
     activeId,
@@ -34,6 +41,7 @@ const ProtectedWorkspace: React.FC = () => {
     addMessage,
     updateLastMessageContent,
     updateLastMessageModel,
+    finishStreamingMessage,
     isGenerating,
     setGenerating,
     stopGeneration,
@@ -70,7 +78,7 @@ const ProtectedWorkspace: React.FC = () => {
 
     addMessage(targetConvId, tempUserMsg);
 
-    const currentModel = settings.default_model || 'gemini-2.5-flash';
+    const currentModel = settings.default_model || 'gemini-3.6-flash';
     const tempAssistantMsg: Message = {
       id: Date.now() + 1,
       conversation_id: targetConvId,
@@ -93,7 +101,7 @@ const ProtectedWorkspace: React.FC = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ content, attachments }),
+        body: JSON.stringify({ content, attachments, model: currentModel }),
         signal: controller.signal,
       });
 
@@ -111,13 +119,18 @@ const ProtectedWorkspace: React.FC = () => {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+        for (const rawEvent of events) {
+          const trimmed = rawEvent.trim();
+          if (!trimmed) continue;
+
+          const dataLine = trimmed.split('\n').find((l) => l.startsWith('data: '));
+          if (dataLine) {
             try {
-              const data = JSON.parse(line.slice(6).trim());
+              const jsonStr = dataLine.slice(6).trim();
+              const data = JSON.parse(jsonStr);
               if (data.type === 'init' && data.model) {
                 updateLastMessageModel(targetConvId, data.model);
               } else if (data.type === 'chunk') {
@@ -126,16 +139,29 @@ const ProtectedWorkspace: React.FC = () => {
                 updateLastMessageContent(targetConvId, `\n\n⚠️ **Error:** ${data.message}`);
               }
             } catch (e) {
-              // Ignore line parse errors
+              console.error('SSE JSON parse error:', e, dataLine);
             }
           }
         }
+      }
+
+      if (buffer.trim().startsWith('data: ')) {
+        try {
+          const dataLine = buffer.trim().split('\n').find((l) => l.startsWith('data: '));
+          if (dataLine) {
+            const data = JSON.parse(dataLine.slice(6).trim());
+            if (data.type === 'chunk') {
+              updateLastMessageContent(targetConvId, data.text);
+            }
+          }
+        } catch (e) {}
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         updateLastMessageContent(targetConvId, '\n\n⚠️ *Connection error. Please try again.*');
       }
     } finally {
+      finishStreamingMessage(targetConvId);
       setGenerating(false, null);
       fetchConversations();
     }
@@ -191,6 +217,7 @@ const ProtectedWorkspace: React.FC = () => {
       </div>
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+      <SessionTimeoutModal />
       <ToastContainer />
     </div>
   );

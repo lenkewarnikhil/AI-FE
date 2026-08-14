@@ -20,6 +20,8 @@ export interface UserSettings {
   glass_opacity?: number;
   glass_blur?: number;
   default_model: string;
+  system_prompt?: string;
+  temperature?: number;
   enter_to_send: boolean;
   show_timestamps: boolean;
   stream_responses: boolean;
